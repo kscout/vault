@@ -1,6 +1,6 @@
 vault:
   # Directory data volume is mounted in pod
-  dataMount: /vault/file
+  dataMount: /mnt/data
 
   # Address to listen on
   address: 0.0.0.0:8200
@@ -10,7 +10,7 @@ vault:
 
 # Vault API controller configuration
 vac:
-  imageVersion: v0.1.0
+  imageVersion: v0.1.2
 
   # Vault API token, if empty VAC will run in bootstrap mode (just sit there)
   #vaultServerToken: ""

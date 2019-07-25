@@ -1,18 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ template "vault.resource-name" . "vac" }}
+  name: {{ include "vault.resource-name" . }}
   labels:
-{{ template "vault.resource-labels" . "vac" | indent 4 }}
+{{ include "vault.resource-labels" . | indent 4 }}
+    component: vac
 spec:
   replicas: 1
   selector:
     matchLabels:
-{{ template "vault.resource-labels" . "vac" | indent 6 }}
+{{ include "vault.resource-labels" . | indent 6 }}
+      component: vac
   template:
     metadata:
       labels:
-{{ template "vault.resource-labels" . "vac" | indent 8 }}
+{{ include "vault.resource-labels" . | indent 8 }}
+        component: vac
       annotations:
         {{- range $path, $_ := .Files.Glob "config/vac/*" }}
         config-{{ $path | base }}-sha256sum: {{ tpl ($.Files.Get $path) $ | sha256sum }}
@@ -21,7 +24,7 @@ spec:
       volumes:
         - name: config
           secret:
-            name: {{ template "vault.resource-name" . "vac-config" }}
+            secretName: {{ include "vault.resource-name" . }}-vac-config
       containers:
         - name: vaac
           image: docker.io/kscout/vault-api-controller:{{ .Values.vac.imageVersion }}

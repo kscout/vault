@@ -1,19 +1,22 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ .Values.global.env }}-{{ .Values.global.app }}
+  name: {{ include "vault.resource-name" . }}
   labels:
-{{ template "vault.resource-labels" . "vault" | indent 4 }}
+{{ include "vault.resource-labels" .  | indent 4 }}
+    component: vault
 spec:
   replicas: 1
   selector:
     matchLabels:
-{{ template "vault.resource-labels" . "vault" | indent 6 }}
-  serviceName: {{ template "vault.resource-name" . }}
+{{ include "vault.resource-labels" . | indent 6 }}
+      component: vault
+  serviceName: {{ include "vault.resource-name" . }}
   template:
     metadata:
       labels:
-{{ template "vault.resource-labels" . "vault" | indent 8 }}
+{{ include "vault.resource-labels" . | indent 8 }}
+        component: vault
       annotations:
         {{- range $path, $_ := .Files.Glob "config/vault/*" }}
         config-{{ $path | base }}-sha256sum: {{ tpl ($.Files.Get $path) $ | sha256sum }}
@@ -22,27 +25,44 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: {{ template "vault.resource-name" . "vault-config" }}
+            name: {{ include "vault.resource-name" . }}-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "vault.resource-name" . }}-data
       containers:
         - name: vault
           image: vault
+          command:
+            - vault
+            - server
+          env:
+            - name: SKIP_SETCAP
+              value: "true"
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: VAULT_CLUSTER_ADDR
+              value: "http://$(POD_IP):8201"
           args:
-            - "--config=/vault/config/server.hcl"
+            - "--config=/mnt/config/server.hcl"
           volumeMounts:
             - name: config
-              readOnly: true
-              mountPath: /vault/config/
+              mountPath: /mnt/config
+            - name: data
+              mountPath: {{ .Values.vault.dataMount }}
           ports:
             - name: http
               containerPort: 8200
-              protocol: TCP
+            - name: cluster-address
+              containerPort: 8201
           livenessProbe:
             httpGet:
-              path: '/sys/health?standbycode=200&drsecondarycode=200&performancestandbycode=200&sealedcode=200&uninitcode=200'
+              path: '/v1/sys/health?standbyok=true&uninitcode=200&uninitcode=200'
               port: http
               scheme: HTTP
           readinessProbe:
             httpGet:
-              path: '/sys/health?standbycode=200&drsecondarycode=200&performancestandbycode=200&sealedcode=200&uninitcode=200'
+              path: '/v1/sys/health?standbyok=true&uninitcode=200&uninitcode=200'
               port: http
               scheme: HTTP

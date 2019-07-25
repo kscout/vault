@@ -1,9 +1,10 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ template "vault.resource-name" . "vault-stconfig" }}
+  name: {{ include "vault.resource-name" . }}-config
   labels:
-{{ template "vault.resource-labels" . "vault" | indent 4 }}
+{{ include "vault.resource-labels" . | indent 4 }}
+    component: vault
 data:
   {{- range $path, $_ := .Files.Glob "config/vault/*" }}
   {{ $path | base }}: |-

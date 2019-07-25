@@ -9,7 +9,7 @@ APP ?= vault
 
 KUBE_NS ?= kscout
 KUBE_LABELS ?= app=${APP},env=${ENV}
-KUBE_TYPES ?= configmap,deployment,statefulset,service
+KUBE_TYPES ?= pvc,configmap,deployment,statefulset,service
 
 KUBECTL ?= oc
 KUBE_APPLY ?= ${KUBECTL} apply -f -

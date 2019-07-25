@@ -6,6 +6,4 @@ Token = "{{ .Values.vac.vaultServerToken }}"
 [DesiredStates.GitHubAuth]
 Path = "/auth/github/config"
 
-state = {
-      organization = "kscout"
-}
+state = { organization = "kscout" }
