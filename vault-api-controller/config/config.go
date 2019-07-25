@@ -56,7 +56,7 @@ func NewConfig() (*Config, error) {
 	loader.AddConfigPath("/etc/vault-api-controller")
 
 	var cfg Config
-	if err := loader.Loader(&cfg); err != nil {
+	if err := loader.Load(&cfg); err != nil {
 		return nil, fmt.Errorf("error loading configuration: %s", err.Error())
 	}
 	return &cfg, nil
