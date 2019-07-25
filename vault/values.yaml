@@ -1,0 +1,10 @@
+vault:
+  # Directory data volume is mounted in pod
+  dataMount: /vault/file
+
+  # Address to listen on
+  address: 0.0.0.0:8200
+
+# Vault API controller configuration
+vac:
+  imageVersion: v0.1.0
