@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"reflect"
 	"time"
 
 	"github.com/kscout/vault/vault-api-controller/config"
@@ -99,7 +100,7 @@ func main() {
 
 				logger.Debugf("actual state=%#v", actualState)
 
-				if actualState.State != desiredState.State {
+				if reflect.DeepEqual(actualState.State.desiredState.State) {
 					logger.Debugf("desired and actual states are different, setting \"%s\" state",
 						desiredState.Path)
 
