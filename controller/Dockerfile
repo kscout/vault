@@ -5,15 +5,14 @@ RUN apk add --update git go musl-dev
 RUN adduser -D vault
 USER vault
 
-RUN mkdir -p /home/vault/vault-api-controller
-WORKDIR /home/vault/vault-api-controller
+RUN mkdir -p /home/vault/controller
+WORKDIR /home/vault/controller
 
 COPY --chown=vault:vault go.mod .
 COPY --chown=vault:vault go.sum .
 RUN go mod download
 
-COPY --chown=vault:vault main.go .
-COPY --chown=vault:vault config/ ./config
+COPY --chown=vault:vault . .
 RUN go build
 
-CMD /home/vault/vault-api-controller/vault-api-controller
+CMD /home/vault/controller/controller
