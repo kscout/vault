@@ -1,6 +1,6 @@
 FROM alpine:latest
 
-RUN apk add --update git go
+RUN apk add --update git go musl-dev
 
 RUN adduser -D vault
 USER vault
