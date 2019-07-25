@@ -79,7 +79,11 @@ func main() {
 					State: make(map[string]interface{}),
 				}
 
-				getReq := vault.NewRequest("GET", desiredState.Path)
+				getReq, err := vault.NewRequest("GET", desiredState.Path).ToHTTP()
+				if err != nil {
+					logger.Fatalf("failed to build get state request for \"%s\": %s",
+						desiredState.Path, err.Error())
+				}
 
 				getResp, err := http.DefaultClient.Do(getReq)
 				if err != nil {
@@ -99,7 +103,12 @@ func main() {
 					logger.Debugf("desired and actual states are different, setting \"%s\" state",
 						desiredState.Path)
 
-					setReq := vault.NewRequest("POST", desiredState.Path)
+					setReq, err := vault.NewRequest("POST", desiredState.Path).ToHTTP()
+					if err != nil {
+						logger.Fatalf("failed to build set state request for \"%s\": %s",
+							desiredState.Path, err.Error())
+					}
+
 					setBuf := bytes.NewBuffer(nil)
 					setEncoder := json.NewEncoder(setBuf)
 
@@ -120,7 +129,7 @@ func main() {
 
 			logger.Debug("ran control loop, sleep for 15s")
 
-			controlLoopTimer.Reset(controlLoopSleepDir)
+			controlLoopTimer.Reset(controlLoopSleepDur)
 			break
 		}
 	}
