@@ -53,7 +53,7 @@ func NewConfig() (*Config, error) {
 	loader := goconf.NewDefaultLoader()
 
 	loader.AddConfigPath("*.toml")
-	loader.AddConfigPath("/etc/vault-api-controller")
+	loader.AddConfigPath("/etc/vault-api-controller/*.toml")
 
 	var cfg Config
 	if err := loader.Load(&cfg); err != nil {
