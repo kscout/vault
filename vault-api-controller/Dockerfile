@@ -13,6 +13,7 @@ COPY --chown=vault:vault go.sum .
 RUN go mod download
 
 COPY --chown=vault:vault main.go .
+COPY --chown=vault:vault config .
 RUN go build
 
 CMD /home/vault/vault-api-controller/vault-api-controller

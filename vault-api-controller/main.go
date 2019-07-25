@@ -43,6 +43,12 @@ func main() {
 		logger.Fatalf("failed to load configuration: %s", err.Error())
 	}
 
+	if cfg.VaultServer.Token == "" {
+		logger.Debug("VaultServer.Token was empty, in bootstrapping mode, will wait forever")
+		<-ctx.Done()
+		return
+	}
+
 	vault, err := vaultApi.NewClient(&vaultApi.Config{
 		Address: cfg.VaultServer.Address,
 	})
