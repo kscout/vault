@@ -1,0 +1,11 @@
+[VaultServer]
+Address = "localhost:8200"
+Token = "{{ .Values.vac.vaultServerToken }}"
+
+[DesiredStates]
+[DesiredStates.GitHubAuth]
+Path = "/auth/github/config"
+
+state = {
+      organization = "kscout"
+}

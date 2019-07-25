@@ -5,6 +5,12 @@ vault:
   # Address to listen on
   address: 0.0.0.0:8200
 
+  # Host
+  host: vault.kscout.io
+
 # Vault API controller configuration
 vac:
   imageVersion: v0.1.0
+
+  # Vault API token, if empty VAC will run in bootstrap mode (just sit there)
+  #vaultServerToken: ""

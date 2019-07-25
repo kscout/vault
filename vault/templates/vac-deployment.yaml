@@ -20,7 +20,7 @@ spec:
     spec:
       volumes:
         - name: config
-          configMap:
+          secret:
             name: {{ template "vault.resource-name" . "vac-config" }}
       containers:
         - name: vaac

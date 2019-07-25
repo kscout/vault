@@ -32,3 +32,17 @@ spec:
             - name: config
               readOnly: true
               mountPath: /vault/config/
+          ports:
+            - name: http
+              containerPort: 8200
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: '/sys/health?standbycode=200&drsecondarycode=200&performancestandbycode=200&sealedcode=200&uninitcode=200'
+              port: http
+              scheme: HTTP
+          readinessProbe:
+            httpGet:
+              path: '/sys/health?standbycode=200&drsecondarycode=200&performancestandbycode=200&sealedcode=200&uninitcode=200'
+              port: http
+              scheme: HTTP

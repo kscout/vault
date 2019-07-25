@@ -1,0 +1,20 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ template "vault.resource-name" . }}
+  labels:
+{{ template "vault.resource-labels" . "vault" | indent 4 }}    
+spec:
+  host: {{ .Values.vault.host }}
+  path: /
+  to:
+    kind: Service
+    name: {{ template "vault.resource-name" . }}
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+status:
+  ingress:
+    - host: {{ .Values.vault.host }}
