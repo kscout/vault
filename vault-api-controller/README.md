@@ -6,9 +6,13 @@ Manages a Vault server's configuration through the HTTP API.
 - [Develop](#develop)
 
 # Overview
-Controller which retrieves vault's state from 
-[the HTTP API](https://www.vaultproject.io/api). Compares with declared state 
-and sets state to reconcile differences.
+Controller which manages a vault server.
+
+Currently handles:
+
+- Initializing
+- Unsealing
+- Setting configuration via API
 
 # Develop
 Install Go 1.12+.
