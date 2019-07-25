@@ -45,7 +45,7 @@ type VaultServerConfig struct {
 	// If empty the server waits until killed. This is to help with the
 	// bootstrapping process. During the time that the Vault server is starting
 	// but there is not a token for this process yet.
-	Token string `validate:"required"`
+	Token string
 }
 
 // NewConfig loads configuration from files
