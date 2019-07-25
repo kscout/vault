@@ -1,5 +1,5 @@
-# Vault API Controller
-Manages a Vault server's configuration through the HTTP API.
+# Controller
+Manages a Vault server through its HTTP API.
 
 # Table Of Contents
 - [Overview](#overview)
