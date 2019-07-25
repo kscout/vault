@@ -6,7 +6,7 @@ See the config package to learn how to declare a desired state.
 package main
 
 import (
-	"buffer"
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
