@@ -118,7 +118,7 @@ func main() {
 							"as json: %s", desiredState.Path, err.Error())
 					}
 
-					_, err := http.DefaultClient.Do(setReq)
+					_, err = http.DefaultClient.Do(setReq)
 					if err != nil {
 						logger.Fatalf("failed to set state for \"%s\": %s",
 							desiredState.Path, err.Error())
