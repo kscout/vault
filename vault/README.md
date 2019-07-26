@@ -3,12 +3,12 @@ Vault Helm Chart.
 
 # Table Of Contents
 - [Overview](#overview)
-- [Use](#use)
+- [Deploy](#deploy)
 
 # Overview
 Helm chart which deploys Vault.
 
-# Use
+# Deploy
 Run:
 
 ```
