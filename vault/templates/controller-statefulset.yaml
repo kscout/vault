@@ -1,33 +1,34 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
-  name: {{ include "vault.resource-name" . }}
+  name: {{ include "vault.resource-name" . }}-controller
   labels:
 {{ include "vault.resource-labels" . | indent 4 }}
-    component: vac
+    component: controller
 spec:
   replicas: 1
   selector:
     matchLabels:
 {{ include "vault.resource-labels" . | indent 6 }}
-      component: vac
+      component: controller
+  serviceName: {{ include "vault.resource-name" . }}-controller
   template:
     metadata:
       labels:
 {{ include "vault.resource-labels" . | indent 8 }}
-        component: vac
+        component: controller
       annotations:
-        {{- range $path, $_ := .Files.Glob "config/vac/*" }}
+        {{- range $path, $_ := .Files.Glob "config/controller/*" }}
         config-{{ $path | base }}-sha256sum: {{ tpl ($.Files.Get $path) $ | sha256sum }}
         {{- end }}
     spec:
       volumes:
         - name: config
-          secret:
-            secretName: {{ include "vault.resource-name" . }}-vac-config
+          configMap:
+            name: {{ include "vault.resource-name" . }}-controller-config
       containers:
         - name: vaac
-          image: docker.io/kscout/vault-api-controller:{{ .Values.vac.imageVersion }}
+          image: docker.io/kscout/vault-controller:{{ .Values.controller.imageVersion }}
           volumeMounts:
             - name: config
-              mountPath: /etc/vault-api-controller
+              mountPath: /etc/vault-controller

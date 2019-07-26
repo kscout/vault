@@ -9,8 +9,5 @@ vault:
   host: vault.kscout.io
 
 # Vault API controller configuration
-vac:
-  imageVersion: v0.1.2
-
-  # Vault API token, if empty VAC will run in bootstrap mode (just sit there)
-  #vaultServerToken: ""
+controller:
+  imageVersion: v0.2.0alpha2
