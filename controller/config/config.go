@@ -46,6 +46,9 @@ type KubeSecretConfig struct {
 	// Name is the secret's name
 	Name string `validate:"required"`
 
+	// Namespace to create secret
+	Namespace string `validate:"required"`
+
 	// Labels to add to secret resource, optional
 	Labels map[string]string
 }

@@ -16,8 +16,8 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
+	"flag"
 	"os"
 	"os/signal"
 
@@ -25,18 +25,18 @@ import (
 
 	"github.com/Noah-Huppert/golog"
 	vaultAPI "github.com/hashicorp/vault/api"
-	corev1 "k8s.io/api/core/v1"
-	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	kCoreV1 "k8s.io/api/core/v1"
+	kErrors "k8s.io/apimachinery/pkg/api/errors"
+	kMetaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	kubeRest "k8s.io/client-go/rest"
+	kRest "k8s.io/client-go/rest"
+	kClientcmd "k8s.io/client-go/tools/clientcmd"
 )
 
 func main() {
 	// {{{1 Initialize controller
+	// {{{2 Process lifecycle
 	ctx, cancelCtx := context.WithCancel(context.Background())
-
-	logger := golog.NewStdLogger("controller")
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt)
@@ -51,12 +51,21 @@ func main() {
 		}
 	}()
 
+	// {{{2 Logger and config
+	logger := golog.NewStdLogger("controller")
+
 	cfg, err := config.NewConfig()
 	if err != nil {
 		logger.Fatalf("failed to load configuration: %s",
 			err.Error())
 	}
 
+	// {{{2 Flags
+	kubeconfig := flag.String("kubeconfig", "", "(Optional) Use provided kubeconfig "+
+		"to authenticate with Kubernetes API")
+	flag.Parse()
+
+	// {{{2 Vault API
 	vault, err := vaultAPI.NewClient(&vaultAPI.Config{
 		Address: cfg.Vault.Addr,
 	})
@@ -64,25 +73,33 @@ func main() {
 		logger.Fatalf("failed to create Vault API client: %s",
 			err.Error())
 	}
-	vaultSys := vault.Sys()
 
-	kubeCfg, err := kubeRest.InClusterConfig()
-	if err != nil {
-		logger.Fatalf("failed to create Kubernetes configuration: %s",
-			err.Error())
+	// {{{2 Kubernetes API
+	var kCfg *kRest.Config
+
+	if len(*kubeconfig) > 0 { // Out of cluster
+		kCfg, err = kClientcmd.BuildConfigFromFlags("", *kubeconfig)
+		if err != nil {
+			logger.Fatalf("failed to create out of cluster "+
+				"Kubernetes configurtion: %s", err.Error())
+		}
+	} else { // In cluster
+		kCfg, err = kRest.InClusterConfig()
+		if err != nil {
+			logger.Fatalf("failed to create in cluster "+
+				"Kubernetes configuration: %s", err.Error())
+		}
 	}
 
-	kubeClient, err := kubernetes.NewForConfig(kubeCfg)
+	kClient, err := kubernetes.NewForConfig(kCfg)
 	if err != nil {
 		logger.Fatalf("failed to create Kubernetes client: %s",
 			err.Error())
 	}
 
-	kubeSecrets := kubeClient.CoreV1().Secrets("")
-
 	// {{{1 Initialize Vault if needed
 	// {{{2 Check if Vault is initialized
-	isVaultInit, err := vaultSys.InitStatus()
+	isVaultInit, err := vault.Sys().InitStatus()
 	if err != nil {
 		logger.Fatalf("failed to get Vault init status: %s",
 			err.Error())
@@ -90,10 +107,26 @@ func main() {
 
 	// {{{2 Initialize Vault
 	if !isVaultInit {
-		// {{{3 Make initialize API request
-		logger.Debug("initializing Vault")
+		// {{{4 Check if vault credentials secret exists
+		kSecrets := kClient.CoreV1().Secrets(cfg.Init.CredsKubeSecret.Namespace)
 
-		initResp, err := vaultSys.Init(&vaultAPI.InitRequest{
+		_, err = kSecrets.Get(cfg.Init.CredsKubeSecret.Name,
+			kMetaV1.GetOptions{})
+
+		if err != nil && !kErrors.IsNotFound(err) {
+			logger.Fatalf("failed to check if a vault credentials secret "+
+				"already exists: %s", err.Error())
+		} else if err == nil {
+			logger.Fatalf("the Kubernetes secret \"%s\" where vault credentails will be "+
+				"stored already exists. The initialization process cannot continue "+
+				"as we will not overwrite this secret and we need a place to store the "+
+				"vault credentials", cfg.Init.CredsKubeSecret.Name)
+		}
+
+		// {{{3 Make initialize API request
+		logger.Info("initializing Vault")
+
+		initResp, err := vault.Sys().Init(&vaultAPI.InitRequest{
 			SecretShares:    int(cfg.Init.NumKeys),
 			SecretThreshold: int(cfg.Init.NumKeys),
 		})
@@ -102,61 +135,99 @@ func main() {
 				err.Error())
 		}
 
-		logger.Debug("initialized vault")
+		logger.Info("initialized vault")
+		logger.Info("if the controller crashes before vault credentails are saved the vault will not " +
+			"be accessible ever. This is acceptable as an unititalized vault should be empty")
 
 		// {{{3 Store init credentials in Kubernetes secret
-		logger.Debug("saving vault credentials")
+		logger.Info("saving vault credentials")
 
 		// {{{4 Build secret
-		// {{{5 Master keys to b64 json
-		keysJSON, err := json.Marshal(initResp.Keys)
-		if err != nil {
+		var keysJSON []byte
+		if jsonDat, err := json.Marshal(initResp.Keys); err != nil {
 			logger.Fatalf("failed to marshal vault master keys "+
 				"array into JSON: %s", err.Error())
+		} else {
+			keysJSON = jsonDat
 		}
 
-		keysJSONB64 := []byte{}
-		base64.StdEncoding.Encode(keysJSONB64, keysJSON)
-
-		// {{{5 Root token b64
-		rootTokenB64 := []byte{}
-		base64.StdEncoding.Encode(rootTokenB64, []byte(initResp.RootToken))
-
-		// {{{5 Secret
-		secretSpec := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
+		secretSpec := &kCoreV1.Secret{
+			ObjectMeta: kMetaV1.ObjectMeta{
 				Name:   cfg.Init.CredsKubeSecret.Name,
 				Labels: cfg.Init.CredsKubeSecret.Labels,
 			},
 			Type: "Opaque",
 			Data: map[string][]byte{
-				"Keys":      keysJSONB64,
-				"RootToken": rootTokenB64,
+				"Keys": keysJSON,
+			},
+			StringData: map[string]string{
+				"RootToken": initResp.RootToken,
 			},
 		}
 
-		// {{{4 Check if secret exists
-		_, err = kubeSecrets.Get(cfg.Init.CredsKubeSecret.Name,
-			metav1.GetOptions{})
-
-		if kubeErrors.IsNotFound(err) { // Secret not found, create
-			_, err := kubeSecrets.Create(secretSpec)
-			if err != nil {
-				logger.Fatalf("failed to create credentials "+
-					"secret \"%s\": %s",
-					cfg.Init.CredsKubeSecret.Name, err.Error())
-			}
-		} else if err != nil { // Error getting secret
-			logger.Fatalf("failed get credentials secret: %s",
-				err.Error())
-		} else { // Found secret, exit
-			logger.Fatalf("found existing credentials secret "+
-				"\"%s\" during init, cannot exist",
-				cfg.Init.CredsKubeSecret.Name)
+		// {{{4 Create secret
+		_, err = kSecrets.Create(secretSpec)
+		if err != nil {
+			logger.Fatalf("failed to create credentials "+
+				"secret \"%s\": %s",
+				cfg.Init.CredsKubeSecret.Name, err.Error())
 		}
 
-		logger.Debug("saved vault credentails")
+		logger.Info("saved vault credentails")
+		logger.Infof("vault is now safely initialized, find credentails in the \"%s\" Kubernetes "+
+			"secret in the \"%s\" namespace", cfg.Init.CredsKubeSecret.Name,
+			cfg.Init.CredsKubeSecret.Namespace)
 	} else {
-		logger.Debug("vault already initialized")
+		logger.Info("vault already initialized")
+	}
+
+	// {{{1 Unseal Vault if needed
+	sealStatus, err := vault.Sys().SealStatus()
+	if err != nil {
+		logger.Fatalf("failed to get Vault seal status: %s",
+			err.Error())
+	}
+
+	if sealStatus.Sealed { // Unseal
+		logger.Info("unsealing vault")
+
+		// {{{2 Get vault credentails
+		// {{{3 Get secret
+		kSecrets := kClient.CoreV1().Secrets(cfg.Init.CredsKubeSecret.Namespace)
+
+		secret, err := kSecrets.Get(cfg.Init.CredsKubeSecret.Name,
+			kMetaV1.GetOptions{})
+		if err != nil {
+			logger.Fatalf("failed to get Vault credentails secret \"%s\": %s",
+				cfg.Init.CredsKubeSecret.Name, err.Error())
+		}
+
+		// {{{3 Unmarshal master keys
+		var keys []string
+		if err := json.Unmarshal(secret.Data["Keys"], &keys); err != nil {
+			logger.Fatalf("failed to unmarshal Vault master keys array as JSON: %s",
+				err.Error())
+		}
+
+		// {{{2 Unseal
+		if _, err := vault.Sys().UnsealWithOptions(&vaultAPI.UnsealOpts{Reset: true}); err != nil {
+			logger.Fatalf("failed to reset unseal process before providing unseal keys: %s",
+				err.Error())
+		}
+
+		for i := range keys {
+			resp, err := vault.Sys().Unseal(keys[i])
+			if err != nil {
+				logger.Fatalf("failed to pass unseal key (index: %d): %s", err.Error())
+			}
+
+			if i == len(keys)-1 && resp.Sealed {
+				logger.Fatalf("vault still sealed after last unseal key provided")
+			}
+		}
+
+		logger.Info("vault unsealed")
+	} else {
+		logger.Info("vault already unsealed")
 	}
 }
