@@ -1,4 +1,4 @@
-.PHONY: container container-build container-push
+.PHONY: container container-build container-push vault
 
 VERSION ?= latest
 REPO ?= docker.io/kscout/vault-api-controller:${VERSION}
@@ -15,3 +15,7 @@ container-build:
 # push container image
 container-push:
 	${CONTAINER_CLI} push ${REPO}
+
+# vault starts a single node production vault setup locally
+vault:
+	docker run -it --rm --net host -v "${PWD}:/mnt" vault server --config=/mnt/server.hcl

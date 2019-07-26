@@ -1,0 +1,18 @@
+# Vault server
+[Vault]
+Addr = "http://localhost:8200"
+
+# Vault init process
+[Init]
+NumKeys = 5
+
+[Init.CredsKubeSecret]
+Name = "prod-vault-controller-managed-creds"
+Labels = { app = "vault", component = "controller", env = "staging" }
+
+# API configuration
+[[DesiredEndpoints]]
+Path = "/v1/auth/github/config"
+
+[DesiredEndpoints.State]
+organization = "kscout"
