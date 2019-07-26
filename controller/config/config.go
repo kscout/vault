@@ -6,6 +6,8 @@ package config
 import (
 	"fmt"
 
+	"github.com/kscout/vault/controller/vault"
+
 	"github.com/Noah-Huppert/goconf"
 )
 
@@ -17,8 +19,8 @@ type Config struct {
 	// Init is Vault initialization process parameters
 	Init VaultInitConfig `validate:"required"`
 
-	// DesiredEndpoints holds the desired state for API endpoints
-	DesiredEndpoints []DesiredEndpointConfig
+	// Auth holds Vault authentication configuration
+	Auth VaultAuthConfig
 }
 
 // VaultServerConfig defines details about the Vault server to control
@@ -53,13 +55,10 @@ type KubeSecretConfig struct {
 	Labels map[string]string
 }
 
-// DesiredEndpointConfig defines the state the controller will set a Vault API endpoint to
-type DesiredEndpointConfig struct {
-	// Path to endpoint
-	Path string `validate:"required"`
-
-	// State is the desired state
-	State interface{} `validate:"required"`
+// VaultAuthConfig defines how Vault authenticates users
+type VaultAuthConfig struct {
+	// GitHub authentication configuration
+	GitHub *vault.GHAuthState
 }
 
 // NewConfig loads configuration from TOML files in the PWD

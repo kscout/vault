@@ -11,9 +11,7 @@ Name = "dev-vault-controller-managed-creds"
 Namespace = "kscout"
 Labels = { app = "vault", component = "controller", env = "dev" }
 
-# API configuration
-[[DesiredEndpoints]]
-Path = "/v1/auth/github/config"
-
-[DesiredEndpoints.State]
-organization = "kscout"
+# User authentication
+[Auth]
+[Auth.GitHub]
+Organization = "kscout"

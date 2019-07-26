@@ -18,12 +18,15 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"os"
 	"os/signal"
 
 	"github.com/kscout/vault/controller/config"
+	"github.com/kscout/vault/controller/vault"
 
 	"github.com/Noah-Huppert/golog"
+	"github.com/google/go-cmp/cmp"
 	vaultAPI "github.com/hashicorp/vault/api"
 	kCoreV1 "k8s.io/api/core/v1"
 	kErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -66,7 +69,7 @@ func main() {
 	flag.Parse()
 
 	// {{{2 Vault API
-	vault, err := vaultAPI.NewClient(&vaultAPI.Config{
+	vaultClient, err := vaultAPI.NewClient(&vaultAPI.Config{
 		Address: cfg.Vault.Addr,
 	})
 	if err != nil {
@@ -99,7 +102,7 @@ func main() {
 
 	// {{{1 Initialize Vault if needed
 	// {{{2 Check if Vault is initialized
-	isVaultInit, err := vault.Sys().InitStatus()
+	isVaultInit, err := vaultClient.Sys().InitStatus()
 	if err != nil {
 		logger.Fatalf("failed to get Vault init status: %s",
 			err.Error())
@@ -117,7 +120,7 @@ func main() {
 			logger.Fatalf("failed to check if a vault credentials secret "+
 				"already exists: %s", err.Error())
 		} else if err == nil {
-			logger.Fatalf("the Kubernetes secret \"%s\" where vault credentails will be "+
+			logger.Fatalf("the Kubernetes secret \"%s\" where vault credentials will be "+
 				"stored already exists. The initialization process cannot continue "+
 				"as we will not overwrite this secret and we need a place to store the "+
 				"vault credentials", cfg.Init.CredsKubeSecret.Name)
@@ -126,7 +129,7 @@ func main() {
 		// {{{3 Make initialize API request
 		logger.Info("initializing Vault")
 
-		initResp, err := vault.Sys().Init(&vaultAPI.InitRequest{
+		initResp, err := vaultClient.Sys().Init(&vaultAPI.InitRequest{
 			SecretShares:    int(cfg.Init.NumKeys),
 			SecretThreshold: int(cfg.Init.NumKeys),
 		})
@@ -136,7 +139,7 @@ func main() {
 		}
 
 		logger.Info("initialized vault")
-		logger.Info("if the controller crashes before vault credentails are saved the vault will not " +
+		logger.Info("if the controller crashes before vault credentials are saved the vault will not " +
 			"be accessible ever. This is acceptable as an unititalized vault should be empty")
 
 		// {{{3 Store init credentials in Kubernetes secret
@@ -173,16 +176,37 @@ func main() {
 				cfg.Init.CredsKubeSecret.Name, err.Error())
 		}
 
-		logger.Info("saved vault credentails")
-		logger.Infof("vault is now safely initialized, find credentails in the \"%s\" Kubernetes "+
+		logger.Info("saved vault credentials")
+		logger.Infof("vault is now safely initialized, find credentials in the \"%s\" Kubernetes "+
 			"secret in the \"%s\" namespace", cfg.Init.CredsKubeSecret.Name,
 			cfg.Init.CredsKubeSecret.Namespace)
 	} else {
 		logger.Info("vault already initialized")
 	}
 
+	// {{{1 Get vault credentials
+	// {{{2 Get secret
+	kSecrets := kClient.CoreV1().Secrets(cfg.Init.CredsKubeSecret.Namespace)
+
+	vaultCredsSecret, err := kSecrets.Get(cfg.Init.CredsKubeSecret.Name,
+		kMetaV1.GetOptions{})
+	if err != nil {
+		logger.Fatalf("failed to get Vault credentials secret \"%s\": %s",
+			cfg.Init.CredsKubeSecret.Name, err.Error())
+	}
+
+	// {{{2 Unmarshal master keys in array
+	var vaultMasterKeys []string
+	if err := json.Unmarshal(vaultCredsSecret.Data["Keys"], &vaultMasterKeys); err != nil {
+		logger.Fatalf("failed to unmarshal Vault master keys array as JSON: %s",
+			err.Error())
+	}
+
+	// {{{2 Give vault client root token
+	vaultClient.SetToken(string(vaultCredsSecret.Data["RootToken"]))
+
 	// {{{1 Unseal Vault if needed
-	sealStatus, err := vault.Sys().SealStatus()
+	sealStatus, err := vaultClient.Sys().SealStatus()
 	if err != nil {
 		logger.Fatalf("failed to get Vault seal status: %s",
 			err.Error())
@@ -191,37 +215,18 @@ func main() {
 	if sealStatus.Sealed { // Unseal
 		logger.Info("unsealing vault")
 
-		// {{{2 Get vault credentails
-		// {{{3 Get secret
-		kSecrets := kClient.CoreV1().Secrets(cfg.Init.CredsKubeSecret.Namespace)
-
-		secret, err := kSecrets.Get(cfg.Init.CredsKubeSecret.Name,
-			kMetaV1.GetOptions{})
-		if err != nil {
-			logger.Fatalf("failed to get Vault credentails secret \"%s\": %s",
-				cfg.Init.CredsKubeSecret.Name, err.Error())
-		}
-
-		// {{{3 Unmarshal master keys
-		var keys []string
-		if err := json.Unmarshal(secret.Data["Keys"], &keys); err != nil {
-			logger.Fatalf("failed to unmarshal Vault master keys array as JSON: %s",
-				err.Error())
-		}
-
-		// {{{2 Unseal
-		if _, err := vault.Sys().UnsealWithOptions(&vaultAPI.UnsealOpts{Reset: true}); err != nil {
+		if _, err := vaultClient.Sys().UnsealWithOptions(&vaultAPI.UnsealOpts{Reset: true}); err != nil {
 			logger.Fatalf("failed to reset unseal process before providing unseal keys: %s",
 				err.Error())
 		}
 
-		for i := range keys {
-			resp, err := vault.Sys().Unseal(keys[i])
+		for i, key := range vaultMasterKeys {
+			resp, err := vaultClient.Sys().Unseal(key)
 			if err != nil {
 				logger.Fatalf("failed to pass unseal key (index: %d): %s", err.Error())
 			}
 
-			if i == len(keys)-1 && resp.Sealed {
+			if i == len(vaultMasterKeys)-1 && resp.Sealed {
 				logger.Fatalf("vault still sealed after last unseal key provided")
 			}
 		}
@@ -230,4 +235,92 @@ func main() {
 	} else {
 		logger.Info("vault already unsealed")
 	}
+
+	// {{{1 Setup Vault authentication
+	if cfg.Auth.GitHub != nil {
+		// {{{1 Enable Vault GitHub authentication if required
+		vaultAuths, err := vaultClient.Sys().ListAuth()
+		if err != nil {
+			logger.Fatalf("failed to list Vault authentication providers: %s",
+				err.Error())
+		}
+		if _, ok := vaultAuths["github/"]; !ok { // Not found create
+			logger.Info("enabling GitHub Vault authentication")
+
+			req := vaultClient.NewRequest("POST", "/v1/sys/auth/github")
+			err = req.SetJSONBody(map[string]interface{}{
+				"description": fmt.Sprintf("Allows GitHub users in the %s organization to authenticate",
+					cfg.Auth.GitHub.Organization),
+				"type": "github",
+			})
+			if err != nil {
+				logger.Fatalf("failed to encode enable Vault GitHub authentication request body to JSON: %s",
+					err.Error())
+			}
+
+			_, err := vaultClient.RawRequestWithContext(ctx, req)
+			if err != nil {
+				logger.Fatalf("failed to enable Vault GitHub authentication: %s", err.Error())
+			}
+
+			logger.Info("enabled GitHub Vault authentication")
+		} else {
+			logger.Info("vault GitHub authentication already enabled")
+		}
+
+		// {{{1 Configure Vault GitHub authentication if required
+		getReq := vaultClient.NewRequest("GET", "/v1/auth/github/config")
+		getResp, err := vaultClient.RawRequestWithContext(ctx, getReq)
+		if err != nil {
+			logger.Fatalf("failed to get Vault GitHub authentication configuration: %s",
+				err.Error())
+		}
+
+		var getRespDat vault.GetGHAuthResp
+		if err := getResp.DecodeJSON(&getRespDat); err != nil {
+			logger.Fatalf("failed to decode get Vault GitHub authentication configuration "+
+				"response as JSON: %s", err.Error())
+		}
+
+		if !cmp.Equal(getRespDat.Data, *cfg.Auth.GitHub) { // Configuration is different, set
+			logger.Info("configuring Vault GitHub authentication")
+
+			setReq := vaultClient.NewRequest("POST", "/v1/auth/github/config")
+			if err := setReq.SetJSONBody(*cfg.Auth.GitHub); err != nil {
+				logger.Fatalf("failed to encode desired Vault GitHub authentication "+
+					"as JSON: %s", err.Error())
+			}
+
+			if _, err := vaultClient.RawRequestWithContext(ctx, setReq); err != nil {
+				logger.Fatalf("failed to call set Vault GitHub authentication endpoint: %s",
+					err.Error())
+			}
+
+			logger.Info("configured Vault GitHub authentication")
+		} else {
+			logger.Info("vault GitHub authentication already configured")
+		}
+	}
+
+	/*
+		for _, endpoint := range cfg.DesiredEndpoints {
+			logger.Infof("setting \"%s\" Vault API endpoint state", endpoint.Path)
+
+			// {{{2 Get actual state
+			getReq := vault.NewRequest("GET", endpoint.Path)
+			getResp, err := vault.RawRequestWithContext(ctx, getReq)
+			if err != nil {
+				logger.Fatalf("failed to get Vault API endpoint state  \"%s\": %s",
+					endpoint.Path, err.Error())
+			}
+
+			var actual interface{}
+			if err := getResp.DecodeJSON(&actual); err != nil {
+				logger.Fatalf("failed to decode vault API get endpoint state response \"%s\": %s",
+					endpoint.Path, err.Error())
+			}
+
+			logger.Debugf("actual=%#v, expected=%#v", actual, endpoint.State)
+		}
+	*/
 }
