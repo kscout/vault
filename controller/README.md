@@ -12,7 +12,7 @@ Currently handles:
 
 - Initializing
 - Unsealing
-- Setting configuration via API
+- Setting up GitHub authentication
 
 # Develop
 Install Go 1.12+.
