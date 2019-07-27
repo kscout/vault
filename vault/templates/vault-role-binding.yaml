@@ -1,14 +1,14 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "vault.resource-name" . }}-controller-role-binding
+  name: {{ include "vault.resource-name" . }}-role-binding
   labels:
 {{ include "vault.resource-labels" . | indent 4 }}
     component: vault
 subjects:
   - kind: ServiceAccount
-    name: {{ include "vault.resource-name" . }}-controller-service-account
+    name: {{ include "vault.resource-name" . }}-service-account
 roleRef:
   kind: Role
-  name: {{ include "vault.resource-name" . }}-controller-role
+  name: {{ include "vault.resource-name" . }}-role
   apiGroup: rbac.authorization.k8s.io

@@ -7,9 +7,9 @@ Addr = "http://localhost:8200"
 NumKeys = 5
 
 [Init.CredsKubeSecret]
-Name = "dev-vault-controller-managed-creds"
+Name = "prod-vault-controller-managed-creds"
 Namespace = "kscout"
-Labels = { app = "vault", component = "controller", env = "dev" }
+Labels = { app = "vault", component = "controller", env = "prod" }
 
 # User authentication
 [Auth]

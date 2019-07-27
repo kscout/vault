@@ -6,10 +6,12 @@ metadata:
 {{ include "vault.resource-labels" .  | indent 4 }}
     component: vault
 spec:
+  type: NodePort
   ports:
     - name: http
       port: 80
-      targetPort: 8200
+      protocol: TCP
+      targetPort: http
   selector:
 {{ include "vault.resource-labels" . | indent 4 }}
     component: vault

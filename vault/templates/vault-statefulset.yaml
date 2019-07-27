@@ -22,6 +22,7 @@ spec:
         config-{{ $path | base }}-sha256sum: {{ tpl ($.Files.Get $path) $ | sha256sum }}
         {{- end }}
     spec:
+      serviceAccountName: {{ include "vault.resource-name" . }}-controller-service-account
       volumes:
         - name: config
           configMap:
@@ -66,3 +67,8 @@ spec:
               path: '/v1/sys/health?standbyok=true&uninitcode=200&uninitcode=200'
               port: http
               scheme: HTTP
+        - name: controller
+          image: docker.io/kscout/vault-controller:{{ .Values.controller.imageVersion }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/vault-controller
