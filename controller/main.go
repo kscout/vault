@@ -101,7 +101,7 @@ func main() {
 			err.Error())
 	}
 
-	ctrlLoopTimer := time.NewTimer(0) // start with 0 but set to 15s after first run
+	ctrlLoopTimer := time.NewTimer(0) // start with 0 but set to 15s after the first run
 
 	runCtrlLoop := true
 
@@ -282,25 +282,59 @@ func main() {
 					logger.Info("vault GitHub authentication already enabled")
 				}
 
+				// {{{2 Tune Vault GitHub authentication if required
+				getTuneReq := vault.APIReq{
+					Method: "GET",
+					Path:   "/v1/sys/auth/github/tune",
+				}
+
+				var getTuneDat vault.AuthMethodTune
+				err = getTuneReq.Do(ctx, vaultClient, &getTuneDat)
+				if err != nil {
+					logger.Fatalf("failed to get Vault GitHub authentication tuning parameters: %s",
+						err.Error())
+				}
+
+				if getTuneDat.ListingVisibility != "unauth" {
+					logger.Info("tuning Vault GitHub authentication")
+
+					setTuneReq := vault.APIReq{
+						Method: "POST",
+						Path:   "/v1/sys/auth/github/tune",
+						Data: vault.AuthMethodTune{
+							ListingVisibility: "unauth",
+						},
+					}
+					err := setTuneReq.Do(ctx, vaultClient, nil)
+					if err != nil {
+						logger.Fatalf("failed to set Vault GitHub authentication tuning parameters: %s",
+							err.Error())
+					}
+
+					logger.Info("tuned Vault GitHub authentication")
+				} else {
+					logger.Info("vault GitHub authentication already tuned")
+				}
+
 				// {{{1 Configure Vault GitHub authentication if required
-				getReq := vaultClient.NewRequest("GET", "/v1/auth/github/config")
-				getResp, err := vaultClient.RawRequestWithContext(ctx, getReq)
+				getCfgReq := vaultClient.NewRequest("GET", "/v1/auth/github/config")
+				getCfgResp, err := vaultClient.RawRequestWithContext(ctx, getCfgReq)
 				if err != nil {
 					logger.Fatalf("failed to get Vault GitHub authentication configuration: %s",
 						err.Error())
 				}
 
-				var getRespDat vault.GetGHAuthResp
-				if err := getResp.DecodeJSON(&getRespDat); err != nil {
+				var getCfgRespDat vault.GetGHAuthResp
+				if err := getCfgResp.DecodeJSON(&getCfgRespDat); err != nil {
 					logger.Fatalf("failed to decode get Vault GitHub authentication configuration "+
 						"response as JSON: %s", err.Error())
 				}
 
-				if !cmp.Equal(getRespDat.Data, *cfg.Auth.GitHub) { // Configuration is different, set
+				if !cmp.Equal(getCfgRespDat.Data, cfg.Auth.GitHub) { // Configuration is different, set
 					logger.Info("configuring Vault GitHub authentication")
 
 					setReq := vaultClient.NewRequest("POST", "/v1/auth/github/config")
-					if err := setReq.SetJSONBody(*cfg.Auth.GitHub); err != nil {
+					if err := setReq.SetJSONBody(cfg.Auth.GitHub); err != nil {
 						logger.Fatalf("failed to encode desired Vault GitHub authentication "+
 							"as JSON: %s", err.Error())
 					}
