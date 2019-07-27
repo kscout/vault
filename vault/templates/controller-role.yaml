@@ -1,0 +1,15 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "vault.resource-name" . }}-controller-role
+  labels:
+{{ include "vault.resource-labels" . | indent 4 }}
+    component: controller
+rules:
+  - resources:
+      - secrets
+    verbs:
+      - get
+      - create
+    apiGroups: [""]
+    
