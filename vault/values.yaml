@@ -10,4 +10,4 @@ vault:
 
 # Vault API controller configuration
 controller:
-  imageVersion: v0.2.0alpha2
+  imageVersion: v0.2.0alpha3
