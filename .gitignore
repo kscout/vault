@@ -1,3 +1,1 @@
 .env
-*secrets*
-!values.secrets.example.yaml

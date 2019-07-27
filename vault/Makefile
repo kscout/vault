@@ -19,7 +19,6 @@ deploy:
 	@if [ -z "${ENV}" ]; then echo "ENV must be set"; exit 1; fi
 	helm template \
 		--values values.yaml \
-		--values values.secrets.${ENV}.yaml \
 		--set global.namespace=${KUBE_NS} \
 		--set global.app=${APP} \
 		--set global.env=${ENV} . \
