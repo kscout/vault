@@ -1,16 +1,10 @@
 /*
 Controller configuration.
-
-Pass configuration via a TOML file in the PWD or in /etc/vault-controller.
-
-The Config.Vault.Addr value can be overriden with the
-VAULT_CONTROLLER_VAULT_ADDR env var.
 */
 package config
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/kscout/vault/controller/vault"
 
@@ -32,14 +26,7 @@ type Config struct {
 // VaultServerConfig defines details about the Vault server to control
 type VaultServerConfig struct {
 	// Addr is the address of the server
-	//
-	// There is no `validate` tag because this tag is processed by the config
-	// file library. And this field's value can be overriden by env var after
-	// the config file loads. A user could not include the config file option
-	// file include an env var, and get an error saying they didn't include
-	// a value, if the validate field was here. Instead validation is done
-	// in NewConfig()
-	Addr string `default:"http://localhost:8200"`
+	Addr string `default:"http://localhost:8200" validate:"required"`
 }
 
 // VaultInitConfig defines how the Vault initialization process
@@ -75,32 +62,17 @@ type VaultAuthConfig struct {
 }
 
 // NewConfig loads configuration from TOML files in the PWD
-// or /etc/vault-controller directories.
-//
-// The Config.Vault.Addr field can be overriden with the
-// VAULT_CONTROLLER_VAULT_ADDR env var. This allows for at
-// runtime customization.
+// or /etc/vault-controller directories
 func NewConfig() (*Config, error) {
-	// Load config from file
-	var cfg Config
 	loader := goconf.NewDefaultLoader()
 
 	loader.AddConfigPath("*.toml")
 	loader.AddConfigPath("/etc/vault-controller/*.toml")
 
+	var cfg Config
 	if err := loader.Load(&cfg); err != nil {
 		return nil, fmt.Errorf("failed to load TOML configuration "+
 			"file(s): %s", err.Error())
-	}
-
-	// Load some fields from env
-	if vaultAddr := os.Getenv("VAULT_CONTROLLER_VAULT_ADDR"); vaultAdrr != "" {
-		cfg.Vault.Addr = vaultAddr
-	}
-
-	// Do validate of fields overriden by env
-	if cfg.Value.Addr == "" {
-		return nil, fmt.Errorf("Vault.Addr field must be present")
 	}
 
 	return &cfg, nil
