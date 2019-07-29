@@ -1,12 +1,5 @@
 package vault
 
-// GetGHAuthResp is the response returned by the Vault API get GitHub authentication
-// provider endpoint
-type GetGHAuthResp struct {
-	// Data
-	Data GHAuthState `json:"data"`
-}
-
 // GHAuthState is the state of a Vault GitHub authentication provider
 type GHAuthState struct {
 	// Organization is the GitHub organization a user must be part of to

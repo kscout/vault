@@ -37,9 +37,9 @@ type VaultInitConfig struct {
 	// will be set to this value.
 	NumKeys uint64 `default:"5" validate:"required"`
 
-	// CredsKubeSecret is configuration for the Kubernetes secret used to
+	// CredsSecret is configuration for the Kubernetes secret used to
 	// store Vault credentials.
-	CredsKubeSecret KubeSecretConfig `validate:"required"`
+	CredsSecret KubeSecretConfig `validate:"required"`
 }
 
 // KubeSecretConfig defines the parameters of the Kubernetes secret managed
@@ -58,7 +58,18 @@ type KubeSecretConfig struct {
 // VaultAuthConfig defines how Vault authenticates users
 type VaultAuthConfig struct {
 	// GitHub authentication configuration
-	GitHub *vault.GHAuthState
+	GitHub *VaultGHAuthConfig
+}
+
+// VaultGHAuthConfig defines how the GitHub authentication will behave
+type VaultGHAuthConfig struct {
+	// Method defines the Vault auth method configuration parameters
+	Method *vault.GHAuthState
+
+	// TeamPolicies defines a policy assigned to members of a GitHub team
+	//
+	// Keys are GitHub team slugs. Values are Vault policies.
+	TeamPolicies map[string]string
 }
 
 // NewConfig loads configuration from TOML files in the PWD
