@@ -1,11 +1,12 @@
-.PHONY: deploy deploy-prod deploy-staging \
-	restart-prometheus restart-alertmanager \
+.PHONY: deploy \
 	rm-deploy \
 	proxy open-vault
 
 MAKE ?= make
 
 APP ?= vault
+
+CONTROLLER_VERSION ?= ${ENV}-latest
 
 KUBE_NS ?= kscout
 KUBE_LABELS ?= app=${APP},env=${ENV}
@@ -22,27 +23,9 @@ deploy:
 		--set global.namespace=${KUBE_NS} \
 		--set global.app=${APP} \
 		--set global.env=${ENV} . \
+		--set controller.image.tag=${CONTROLLER_VERSION} \
 	| ${KUBE_APPLY}
 
-# deploy to production
-deploy-prod:
-	${MAKE} deploy ENV=prod
-
-# deploy to staging
-deploy-staging:
-	${MAKE} deploy ENV=staging
-
-# restart prometheus for ENV
-restart-prometheus:
-	@if [ -z "${ENV}" ]; then echo "ENV must be set"; exit 1; fi
-	kubectl rollout restart deployment/${ENV}-prometheus
-	${KUBECTL} rollout status deployment/${ENV}-prometheus
-
-# restart alert manager for ENV
-restart-alertmanager:
-	@if [ -z "${ENV}" ]; then echo "ENV must be set"; exit 1; fi
-	kubectl rollout restart deployment/${ENV}-alertmanager
-	${KUBECTL} rollout status deployment/${ENV}-alertmanager
 
 # remove deployment for ENV
 rm-deploy:

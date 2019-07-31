@@ -10,4 +10,6 @@ vault:
 
 # Vault API controller configuration
 controller:
-  imageVersion: v0.2.0alpha3
+  image:
+    repo: quay.io/kscout/vault-controller
+    tag: v0.2.0tp1

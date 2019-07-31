@@ -68,7 +68,7 @@ spec:
               port: http
               scheme: HTTP
         - name: controller
-          image: docker.io/kscout/vault-controller:{{ .Values.controller.imageVersion }}
+          image: {{ .Values.controller.image.repo }}:{{ .Values.controller.image.tag }}
           volumeMounts:
             - name: config
               mountPath: /etc/vault-controller
