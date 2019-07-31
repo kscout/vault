@@ -59,6 +59,8 @@ func main() {
 	cfg, err := config.NewConfig()
 	errors.HandleErr(err, "failed to load configuration")
 
+	log.Printf("loaded configuration=%#v\n", cfg)
+
 	// {{{2 Flags
 	kubeconfig := flag.String("kubeconfig", "", "Use provided kubeconfig "+
 		"to authenticate with Kubernetes API. Defaults to using cluster "+
@@ -218,7 +220,7 @@ func main() {
 				for i, key := range vaultMasterKeys {
 					resp, err := vClient.Sys().Unseal(key)
 					errors.HandleErr(err, "failed to pass unseal "+
-						"key (index: %d)")
+						"key (index: %d)", i)
 
 					if i == len(vaultMasterKeys)-1 &&
 						resp.Sealed {
@@ -233,118 +235,114 @@ func main() {
 				log.Println("vault already unsealed")
 			}
 
-			// {{{1 Setup Vault authentication
-			if cfg.Auth.GitHub != nil {
-				// {{{1 Enable Vault GitHub authentication if required
-				log.SetPrefix("[enabled-github-auth] ")
+			// {{{1 Enable Vault GitHub authentication if required
+			log.SetPrefix("[enabled-github-auth] ")
 
-				vaultAuths, err := vClient.Sys().ListAuth()
-				errors.HandleErr(err, "failed to list Vault "+
-					"authentication providers")
-				if _, ok := vaultAuths["github/"]; !ok { // Not found create
-					req := vault.APIReq{
+			vaultAuths, err := vClient.Sys().ListAuth()
+			errors.HandleErr(err, "failed to list Vault "+
+				"authentication providers")
+			if _, ok := vaultAuths["github/"]; !ok { // Not found create
+				req := vault.APIReq{
+					Method: "POST",
+					Path:   "/v1/sys/auth/github",
+					Data: map[string]interface{}{
+						"description": fmt.Sprintf("Allows GitHub "+
+							"users in the %s organization "+
+							"to authenticate",
+							cfg.Auth.GitHub.Method.Organization),
+						"type": "github",
+					},
+				}
+				err := req.Do(ctx, vClient, nil)
+				errors.HandleErr(err, "failed to enable Vault "+
+					"GitHub authentication")
+
+				log.Println("enabled GitHub Vault authentication")
+			} else {
+				log.Println("vault GitHub authentication already enabled")
+			}
+
+			// {{{2 Tune Vault GitHub authentication if required
+			log.SetPrefix("[tune-github-auth] ")
+
+			setTune := vault.SetAPIAction{
+				Path: "/v1/sys/auth/github/tune",
+				DesiredState: &vault.AuthMethodTune{
+					ListingVisibility: "unauth",
+				},
+				StateMatcher: vault.APIRespDataMatcher{},
+			}
+
+			var tuneActual vault.AuthMethodTune
+
+			didSetTune, err := setTune.Do(ctx, vClient, &tuneActual)
+			errors.HandleErr(err, "failed to tune Vault GitHub authentication")
+
+			if didSetTune {
+				log.Println("tuned Vault GitHub authentication")
+			} else {
+				log.Println("vault GitHub authentication already tuned")
+			}
+
+			// {{{1 Configure Vault GitHub authentication if required
+			log.SetPrefix("[config-github-auth] ")
+
+			setGHCfg := vault.SetAPIAction{
+				Path:         "/v1/auth/github/config",
+				DesiredState: cfg.Auth.GitHub.Method,
+				StateMatcher: vault.APIRespDataMatcher{},
+			}
+
+			var ghCfgActual vault.GHAuthState
+
+			didSetGHCfg, err := setGHCfg.Do(ctx, vClient, &ghCfgActual)
+			errors.HandleErr(err, "failed to configure Vault "+
+				"GitHub authentication")
+			if didSetGHCfg {
+				log.Println("configured Vault GitHub authentication")
+			} else {
+				log.Println("vault GitHub authentication " +
+					"already configured")
+			}
+
+			// {{{1 Set GitHub team policy map if required
+			log.SetPrefix("[team-map-github-auth] ")
+
+			matchTeamMap := vault.MatchAPIAction{
+				Req: vault.APIReq{
+					Method: "GET",
+					Path:   "/v1/auth/github/map/teams",
+				},
+				DesiredState: cfg.Auth.GitHub.TeamPolicies,
+				StateMatcher: vault.APIRespDataMatcher{},
+			}
+
+			var matchTeamMapActual interface{}
+
+			teamMapMatches, err := matchTeamMap.Do(ctx, vClient, &matchTeamMapActual)
+			errors.HandleErr(err, "failed to check if actual GitHub team "+
+				"policy map matches desired state")
+
+			if !teamMapMatches {
+				for ghTeam := range cfg.Auth.GitHub.TeamPolicies {
+					setTeamMapReq := vault.APIReq{
 						Method: "POST",
-						Path:   "/v1/sys/auth/github",
+						Path:   fmt.Sprintf("/v1/auth/github/map/teams/%s", ghTeam),
 						Data: map[string]interface{}{
-							"description": fmt.Sprintf("Allows GitHub "+
-								"users in the %s organization "+
-								"to authenticate",
-								cfg.Auth.GitHub.Method.Organization),
-							"type": "github",
+							"data": map[string]interface{}{
+								"value": cfg.Auth.GitHub.TeamPolicies[ghTeam],
+							},
 						},
 					}
-					err := req.Do(ctx, vClient, nil)
-					errors.HandleErr(err, "failed to enable Vault "+
-						"GitHub authentication")
-
-					log.Println("enabled GitHub Vault authentication")
-				} else {
-					log.Println("vault GitHub authentication already enabled")
+					err = setTeamMapReq.Do(ctx, vClient, nil)
+					errors.HandleErr(err, "failed to set Vault GitHub team "+
+						"map for GitHub team \"%s\"", ghTeam)
 				}
 
-				// {{{2 Tune Vault GitHub authentication if required
-				log.SetPrefix("[tune-github-auth] ")
-
-				setTune := vault.SetAPIAction{
-					Path: "/v1/sys/auth/github/tune",
-					DesiredState: &vault.AuthMethodTune{
-						ListingVisibility: "unauth",
-					},
-					StateMatcher: vault.APIRespDataMatcher{},
-				}
-
-				var tuneActual vault.AuthMethodTune
-
-				didSetTune, err := setTune.Do(ctx, vClient, &tuneActual)
-				errors.HandleErr(err, "failed to tune Vault GitHub authentication")
-
-				if didSetTune {
-					log.Println("tuned Vault GitHub authentication")
-				} else {
-					log.Println("vault GitHub authentication already tuned")
-				}
-
-				// {{{1 Configure Vault GitHub authentication if required
-				log.SetPrefix("[config-github-auth] ")
-
-				setGHCfg := vault.SetAPIAction{
-					Path:         "/v1/auth/github/config",
-					DesiredState: cfg.Auth.GitHub.Method,
-					StateMatcher: vault.APIRespDataMatcher{},
-				}
-
-				var ghCfgActual vault.GHAuthState
-
-				didSetGHCfg, err := setGHCfg.Do(ctx, vClient, &ghCfgActual)
-				errors.HandleErr(err, "failed to configure Vault "+
-					"GitHub authentication")
-				if didSetGHCfg {
-					log.Println("configured Vault GitHub authentication")
-				} else {
-					log.Println("vault GitHub authentication " +
-						"already configured")
-				}
-
-				// {{{1 Set GitHub team policy map if required
-				log.SetPrefix("[team-map-github-auth] ")
-
-				matchTeamMap := vault.MatchAPIAction{
-					Req: vault.APIReq{
-						Method: "GET",
-						Path:   "/v1/auth/github/map/teams",
-					},
-					DesiredState: cfg.Auth.GitHub.TeamPolicies,
-					StateMatcher: vault.APIRespDataMatcher{},
-				}
-
-				var matchTeamMapActual interface{}
-
-				teamMapMatches, err := matchTeamMap.Do(ctx, vClient, &matchTeamMapActual)
-				errors.HandleErr(err, "failed to check if actual GitHub team "+
-					"policy map matches desired state")
-
-				if !teamMapMatches {
-					for ghTeam := range cfg.Auth.GitHub.TeamPolicies {
-						setTeamMapReq := vault.APIReq{
-							Method: "POST",
-							Path:   fmt.Sprintf("/v1/auth/github/map/teams/%s", ghTeam),
-							Data: map[string]interface{}{
-								"data": map[string]interface{}{
-									"value": cfg.Auth.GitHub.TeamPolicies[ghTeam],
-								},
-							},
-						}
-						err = setTeamMapReq.Do(ctx, vClient, nil)
-						errors.HandleErr(err, "failed to set Vault GitHub team "+
-							"map for GitHub team \"%s\"", ghTeam)
-					}
-
-					log.Println("configured GitHub team policies map")
-				} else {
-					log.Println("already configured GitHub team " +
-						"policies map")
-				}
-
+				log.Println("configured GitHub team policies map")
+			} else {
+				log.Println("already configured GitHub team " +
+					"policies map")
 			}
 
 			log.SetPrefix("")

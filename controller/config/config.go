@@ -58,13 +58,13 @@ type KubeSecretConfig struct {
 // VaultAuthConfig defines how Vault authenticates users
 type VaultAuthConfig struct {
 	// GitHub authentication configuration
-	GitHub *VaultGHAuthConfig
+	GitHub VaultGHAuthConfig
 }
 
 // VaultGHAuthConfig defines how the GitHub authentication will behave
 type VaultGHAuthConfig struct {
 	// Method defines the Vault auth method configuration parameters
-	Method *vault.GHAuthState
+	Method vault.GHAuthState
 
 	// TeamPolicies defines a policy assigned to members of a GitHub team
 	//

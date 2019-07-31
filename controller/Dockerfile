@@ -12,7 +12,10 @@ COPY --chown=vault:vault go.mod .
 COPY --chown=vault:vault go.sum .
 RUN go mod download
 
-COPY --chown=vault:vault . .
+COPY --chown=vault:vault main.go .
+COPY --chown=vault:vault config config
+COPY --chown=vault:vault errors errors
+COPY --chown=vault:vault vault vault
 RUN go build
 
 CMD /home/vault/controller/controller

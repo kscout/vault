@@ -1,7 +1,7 @@
 .PHONY: container container-build container-push vault
 
 VERSION ?= latest
-REPO ?= docker.io/kscout/vault-controller:${VERSION}
+REPO ?= quay.io/kscout/vault-controller:${VERSION}
 
 CONTAINER_CLI ?= podman
 
