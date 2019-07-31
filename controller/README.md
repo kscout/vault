@@ -17,7 +17,13 @@ Currently handles:
 # Develop
 Install Go 1.12+.
 
-Run the controller:
+Run Vault locally:
+
+```
+make vault
+```
+
+In another terminal run the controller:
 
 ```
 go run .
