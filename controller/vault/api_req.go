@@ -3,6 +3,7 @@ package vault
 import (
 	"context"
 	"fmt"
+	"log"
 
 	vAPI "github.com/hashicorp/vault/api"
 )

@@ -2,8 +2,6 @@ package vault
 
 import (
 	"fmt"
-
-	"github.com/Noah-Huppert/golog"
 )
 
 // AuthMethodTune is the tuning state of a Vault auth method
@@ -28,10 +26,7 @@ type AuthMethodTune struct {
 
 // AuthMethodTuneMatcher matches a desired AuthMethodTune against an
 // actual APIResp
-type AuthMethodTuneMatcher struct {
-	// Logger outputs diffs between expected and actual
-	Logger golog.Logger
-}
+type AuthMethodTuneMatcher struct{}
 
 // Match
 func (m AuthMethodTuneMatcher) Match(expected, actual interface{}) (bool, error) {

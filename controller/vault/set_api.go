@@ -25,7 +25,7 @@ type SetAPIAction struct {
 
 // Do logic to set API resource. A bool is returned indicating if an update
 // was made (true == update).
-func (a SetAPIAction) Do(ctx context.Context, vClient *vAPI.Client) (bool, error) {
+func (a SetAPIAction) Do(ctx context.Context, vClient *vAPI.Client, actual interface{}) (bool, error) {
 	// Check if API resource state matches
 	matchAct := MatchAPIAction{
 		Req: APIReq{
@@ -36,7 +36,7 @@ func (a SetAPIAction) Do(ctx context.Context, vClient *vAPI.Client) (bool, error
 		StateMatcher: a.StateMatcher,
 	}
 
-	if match, err := matchAct.Do(ctx, vClient); err != nil {
+	if match, err := matchAct.Do(ctx, vClient, actual); err != nil {
 		return false, fmt.Errorf("failed to get actual API state and determine "+
 			"if it matches: %s", err.Error())
 	} else if match {

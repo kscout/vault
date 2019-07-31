@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"time"
@@ -27,7 +28,6 @@ import (
 	"github.com/kscout/vault/controller/errors"
 	"github.com/kscout/vault/controller/vault"
 
-	"github.com/Noah-Huppert/golog"
 	vaultAPI "github.com/hashicorp/vault/api"
 	kCoreV1 "k8s.io/api/core/v1"
 	kErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -55,13 +55,9 @@ func main() {
 		}
 	}()
 
-	// {{{2 Logger and config
-	logger := golog.NewStdLogger("controller")
-
-	handleErr := errors.GetErrorHandler(logger)
-
+	// {{{2 Config
 	cfg, err := config.NewConfig()
-	handleErr(err, "failed to load configuration")
+	errors.HandleErr(err, "failed to load configuration")
 
 	// {{{2 Flags
 	kubeconfig := flag.String("kubeconfig", "", "Use provided kubeconfig "+
@@ -73,23 +69,23 @@ func main() {
 	vClient, err := vaultAPI.NewClient(&vaultAPI.Config{
 		Address: cfg.Vault.Addr,
 	})
-	handleErr(err, "failed to create Vault API client")
+	errors.HandleErr(err, "failed to create Vault API client")
 
 	// {{{2 Kubernetes API
 	var kCfg *kRest.Config
 
 	if len(*kubeconfig) > 0 { // Out of cluster
 		kCfg, err = kClientcmd.BuildConfigFromFlags("", *kubeconfig)
-		handleErr(err, "failed to create out of cluster "+
+		errors.HandleErr(err, "failed to create out of cluster "+
 			"Kubernetes configurtion")
 	} else { // In cluster
 		kCfg, err = kRest.InClusterConfig()
-		handleErr(err, "failed to create in cluster "+
+		errors.HandleErr(err, "failed to create in cluster "+
 			"Kubernetes configuration")
 	}
 
 	kClient, err := kubernetes.NewForConfig(kCfg)
-	handleErr(err, "failed to create Kubernetes client")
+	errors.HandleErr(err, "failed to create Kubernetes client")
 
 	// ctrlLoopTimer is used to wait before executing the control loop.
 	// Starts to wait 0 seconds to make the control loop run immediately
@@ -101,14 +97,16 @@ func main() {
 	for runCtrlLoop {
 		select {
 		case <-ctx.Done():
-			logger.Info("stopping")
+			log.Println("stopping")
 			runCtrlLoop = false
 			break
 		case <-ctrlLoopTimer.C:
 			// {{{1 Initialize Vault if needed
 			// {{{2 Check if Vault is initialized
+			log.SetPrefix("[vault-init] ")
+
 			isVaultInit, err := vClient.Sys().InitStatus()
-			handleErr(err, "failed to get Vault init status")
+			errors.HandleErr(err, "failed to get Vault init status")
 
 			// {{{2 Initialize Vault
 			if !isVaultInit {
@@ -120,18 +118,18 @@ func main() {
 					kMetaV1.GetOptions{})
 
 				if err != nil && !kErrors.IsNotFound(err) {
-					logger.Fatalf("failed to check if a "+
+					log.Fatalf("failed to check if a "+
 						"vault credentials secret "+
-						"already exists: %s", err.Error())
+						"already exists: %s\n", err.Error())
 				} else if err == nil {
-					logger.Fatalf("the Kubernetes secret "+
+					log.Fatalf("the Kubernetes secret "+
 						"\"%s\" where vault credentials "+
 						"will be stored already exists. "+
 						"The initialization process "+
 						"cannot continue as we will not "+
 						"overwrite this secret and we "+
 						"need a place to store the "+
-						"vault credentials",
+						"vault credentials\n",
 						cfg.Init.CredsSecret.Name)
 				}
 
@@ -140,10 +138,10 @@ func main() {
 					SecretShares:    int(cfg.Init.NumKeys),
 					SecretThreshold: int(cfg.Init.NumKeys),
 				})
-				handleErr(err, "failed to initialize Vault")
+				errors.HandleErr(err, "failed to initialize Vault")
 
-				logger.Info("initialized vault")
-				logger.Info("if the controller crashes before " +
+				log.Println("initialized vault")
+				log.Println("if the controller crashes before " +
 					"vault credentials are saved the vault " +
 					"will not be accessible ever. This is " +
 					"acceptable as an unititalized vault " +
@@ -152,7 +150,7 @@ func main() {
 				// {{{3 Store init credentials in Kubernetes secret
 				// {{{4 Build secret
 				keysJSON, err := json.Marshal(initResp.Keys)
-				handleErr(err, "failed to marshal vault "+
+				errors.HandleErr(err, "failed to marshal vault "+
 					"master keys array into JSON")
 
 				secretSpec := &kCoreV1.Secret{
@@ -171,18 +169,18 @@ func main() {
 
 				// {{{4 Create secret
 				_, err = kSecrets.Create(secretSpec)
-				handleErr(err, "failed to create credentials "+
+				errors.HandleErr(err, "failed to create credentials "+
 					"secret \"%s\"", cfg.Init.CredsSecret.Name)
 
-				logger.Info("saved vault credentials")
-				logger.Infof("vault is now safely initialized, "+
+				log.Println("saved vault credentials")
+				log.Printf("vault is now safely initialized, "+
 					"find credentials in the "+
 					"\"%s\" Kubernetes secret in the "+
-					"\"%s\" namespace",
+					"\"%s\" namespace\n",
 					cfg.Init.CredsSecret.Name,
 					cfg.Init.CredsSecret.Namespace)
 			} else {
-				logger.Info("vault already initialized")
+				log.Println("vault already initialized")
 			}
 
 			// {{{1 Get vault credentials
@@ -192,52 +190,56 @@ func main() {
 
 			credsSecret, err := kSecrets.Get(cfg.Init.CredsSecret.Name,
 				kMetaV1.GetOptions{})
-			handleErr(err, "failed to get Vault credentials "+
+			errors.HandleErr(err, "failed to get Vault credentials "+
 				"secret \"%s\"", cfg.Init.CredsSecret.Name)
 
 			// {{{2 Unmarshal master keys in array
 			var vaultMasterKeys []string
 			err = json.Unmarshal(credsSecret.Data["Keys"],
 				&vaultMasterKeys)
-			handleErr(err, "failed to unmarshal Vault master keys "+
+			errors.HandleErr(err, "failed to unmarshal Vault master keys "+
 				"array as JSON")
 
 			// {{{2 Give vault client root token
 			vClient.SetToken(string(credsSecret.Data["RootToken"]))
 
 			// {{{1 Unseal Vault if needed
+			log.SetPrefix("[unseal-vault] ")
+
 			sealStatus, err := vClient.Sys().SealStatus()
-			handleErr(err, "failed to get Vault seal status")
+			errors.HandleErr(err, "failed to get Vault seal status")
 
 			if sealStatus.Sealed { // Unseal
 				_, err = vClient.Sys().UnsealWithOptions(
 					&vaultAPI.UnsealOpts{Reset: true})
-				handleErr(err, "failed to reset unseal process "+
+				errors.HandleErr(err, "failed to reset unseal process "+
 					"before providing unseal keys")
 
 				for i, key := range vaultMasterKeys {
 					resp, err := vClient.Sys().Unseal(key)
-					handleErr(err, "failed to pass unseal "+
+					errors.HandleErr(err, "failed to pass unseal "+
 						"key (index: %d)")
 
 					if i == len(vaultMasterKeys)-1 &&
 						resp.Sealed {
-						logger.Fatalf("vault still " +
+						log.Fatalf("vault still " +
 							"sealed after last " +
-							"unseal key provided")
+							"unseal key provided\n")
 					}
 				}
 
-				logger.Info("vault unsealed")
+				log.Println("vault unsealed")
 			} else {
-				logger.Info("vault already unsealed")
+				log.Println("vault already unsealed")
 			}
 
 			// {{{1 Setup Vault authentication
 			if cfg.Auth.GitHub != nil {
 				// {{{1 Enable Vault GitHub authentication if required
+				log.SetPrefix("[enabled-github-auth] ")
+
 				vaultAuths, err := vClient.Sys().ListAuth()
-				handleErr(err, "failed to list Vault "+
+				errors.HandleErr(err, "failed to list Vault "+
 					"authentication providers")
 				if _, ok := vaultAuths["github/"]; !ok { // Not found create
 					req := vault.APIReq{
@@ -252,65 +254,73 @@ func main() {
 						},
 					}
 					err := req.Do(ctx, vClient, nil)
-					handleErr(err, "failed to enable Vault "+
+					errors.HandleErr(err, "failed to enable Vault "+
 						"GitHub authentication")
 
-					logger.Info("enabled GitHub Vault authentication")
+					log.Println("enabled GitHub Vault authentication")
 				} else {
-					logger.Info("vault GitHub authentication already enabled")
+					log.Println("vault GitHub authentication already enabled")
 				}
 
 				// {{{2 Tune Vault GitHub authentication if required
+				log.SetPrefix("[tune-github-auth] ")
+
 				setTune := vault.SetAPIAction{
 					Path: "/v1/sys/auth/github/tune",
-					DesiredState: vault.AuthMethodTune{
+					DesiredState: &vault.AuthMethodTune{
 						ListingVisibility: "unauth",
 					},
-					StateMatcher: vault.AuthMethodTuneMatcher{
-						Logger: logger.GetChild("matcher"),
-					},
+					StateMatcher: vault.APIRespDataMatcher{},
 				}
 
-				didSetTune, err := setTune.Do(ctx, vClient)
-				handleErr(err, "failed to tune Vault GitHub authentication")
+				var tuneActual vault.AuthMethodTune
+
+				didSetTune, err := setTune.Do(ctx, vClient, &tuneActual)
+				errors.HandleErr(err, "failed to tune Vault GitHub authentication")
 
 				if didSetTune {
-					logger.Info("tuned Vault GitHub authentication")
+					log.Println("tuned Vault GitHub authentication")
 				} else {
-					logger.Info("vault GitHub authentication already tuned")
+					log.Println("vault GitHub authentication already tuned")
 				}
 
 				// {{{1 Configure Vault GitHub authentication if required
+				log.SetPrefix("[config-github-auth] ")
+
 				setGHCfg := vault.SetAPIAction{
 					Path:         "/v1/auth/github/config",
 					DesiredState: cfg.Auth.GitHub.Method,
-					StateMatcher: vault.APIRespDataMatcher{
-						Logger: logger.GetChild("matcher"),
-					},
+					StateMatcher: vault.APIRespDataMatcher{},
 				}
-				didSetGHCfg, err := setGHCfg.Do(ctx, vClient)
-				handleErr(err, "failed to configure Vault "+
+
+				var ghCfgActual vault.GHAuthState
+
+				didSetGHCfg, err := setGHCfg.Do(ctx, vClient, &ghCfgActual)
+				errors.HandleErr(err, "failed to configure Vault "+
 					"GitHub authentication")
 				if didSetGHCfg {
-					logger.Info("configured Vault GitHub authentication")
+					log.Println("configured Vault GitHub authentication")
 				} else {
-					logger.Info("vault GitHub authentication " +
+					log.Println("vault GitHub authentication " +
 						"already configured")
 				}
 
 				// {{{1 Set GitHub team policy map if required
+				log.SetPrefix("[team-map-github-auth] ")
+
 				matchTeamMap := vault.MatchAPIAction{
 					Req: vault.APIReq{
 						Method: "GET",
 						Path:   "/v1/auth/github/map/teams",
 					},
 					DesiredState: cfg.Auth.GitHub.TeamPolicies,
-					StateMatcher: vault.APIRespDataMatcher{
-						Logger: logger.GetChild("matcher"),
-					},
+					StateMatcher: vault.APIRespDataMatcher{},
 				}
-				teamMapMatches, err := matchTeamMap.Do(ctx, vClient)
-				handleErr(err, "failed to check if actual GitHub team "+
+
+				var matchTeamMapActual interface{}
+
+				teamMapMatches, err := matchTeamMap.Do(ctx, vClient, &matchTeamMapActual)
+				errors.HandleErr(err, "failed to check if actual GitHub team "+
 					"policy map matches desired state")
 
 				if !teamMapMatches {
@@ -325,19 +335,20 @@ func main() {
 							},
 						}
 						err = setTeamMapReq.Do(ctx, vClient, nil)
-						handleErr(err, "failed to set Vault GitHub team "+
+						errors.HandleErr(err, "failed to set Vault GitHub team "+
 							"map for GitHub team \"%s\"", ghTeam)
 					}
 
-					logger.Info("configured GitHub team policies map")
+					log.Println("configured GitHub team policies map")
 				} else {
-					logger.Info("already configured GitHub team " +
+					log.Println("already configured GitHub team " +
 						"policies map")
 				}
 
 			}
 
-			logger.Debug("ran control loop")
+			log.SetPrefix("")
+			log.Println("ran control loop")
 
 			ctrlLoopTimer.Reset(time.Second * 15)
 
