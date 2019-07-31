@@ -57,6 +57,6 @@ proxy:
 	${KUBECTL} proxy
 
 # open Vault UI for ENV via proxy, defaults to prod
-open-prometheus:
+open-vault:
 	$(eval ENV ?= prod)
 	xdg-open "http://localhost:8001/api/v1/namespaces/kscout/services/${ENV}-vault:http/proxy"
