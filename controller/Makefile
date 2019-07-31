@@ -3,7 +3,7 @@
 VERSION ?= latest
 REPO ?= docker.io/kscout/vault-controller:${VERSION}
 
-CONTAINER_CLI ?= docker
+CONTAINER_CLI ?= podman
 
 # container executes the container-{build,push} targets
 container: container-build container-push
@@ -18,4 +18,4 @@ container-push:
 
 # vault starts a single node production vault setup locally
 vault:
-	docker run -it --rm --net host -v "${PWD}:/mnt" vault server --config=/mnt/server.hcl
+	${CONTAINER_CLI} run -it --rm --net host -v "${PWD}:/mnt" vault server --config=/mnt/server.hcl
