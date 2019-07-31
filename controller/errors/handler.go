@@ -2,19 +2,19 @@ package errors
 
 import (
 	"fmt"
-	"github.com/Noah-Huppert/golog"
+	"log"
 )
 
-// ErrorHandler logs an error and exits the process. If nil does nothing
-type ErrorHandler func(err error, msg string, a ...interface{})
-
-// Returns an ErrorHandler which logs errors and exits using golog
-func GetErrorHandler(logger golog.Logger) ErrorHandler {
-	return func(err error, msg string, a ...interface{}) {
-		if err == nil {
-			return
-		}
-
-		logger.Fatalf("%s: %s", fmt.Sprintf(msg, a), err.Error())
+// HandleErr logs and exits if error is not nil
+func HandleErr(err error, msg string, a ...interface{}) {
+	if err == nil {
+		return
 	}
+
+	fmtMsg := msg
+	if len(a) > 0 {
+		fmtMsg = fmt.Sprintf(msg, a)
+	}
+
+	log.Fatalf("%s: %s\n", fmtMsg, err.Error())
 }
