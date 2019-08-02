@@ -18,4 +18,4 @@ container-push:
 
 # vault starts a single node production vault setup locally
 vault:
-	${CONTAINER_CLI} run -it --rm --net host -v "${PWD}:/mnt" vault server --config=/mnt/server.hcl
+	${CONTAINER_CLI} run -it --rm --net host -v "${PWD}:/mnt" vault server --config=/mnt/debug-server.hcl
